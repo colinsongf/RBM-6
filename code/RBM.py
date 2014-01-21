@@ -12,12 +12,19 @@ class RBM:
     got an input and output theano attribut
     '''
     def __init__(self, n_v, n_h, inputs, vbias=None,
-                 hbias=None, initial_W=None, v_unit='BIN'):
+                 hbias=None, initial_W=None, v_unit='BIN',
+                 unit_type='LOG'):
         '''
         v_unit: str, optional, default: 'BIN'
         This variable control the output unit of our RBM
         The possible value are ['BIN', 'LOG', 'GAUSS']
+
+        unit_type: str, optional, default:'LOG'
+        This variable control the activation function of the unit,
+        'LIN' -> W.h +b
+        'LOG' -> sig(W.h +b)
         '''
+        self.type = unit_type
         
         if initial_W is None:
             initial_W = np.asarray(np.random.uniform(
@@ -42,11 +49,11 @@ class RBM:
         np_rng = np.random.RandomState(1234)
         theano_rng = RandomStreams(np_rng.randint(2**30))
 
-        self.v_unit = v_unit
+        self.v_type = v_unit
         if v_unit is 'LOG':
             theano_rng.v_unit = self.log_sample
         elif v_unit is 'GAUSS':
-            theano_rng.v_unit = theano_rng.normal
+            theano_rng.v_unit = self.gauss_sample
         else:
             theano_rng.v_unit = theano_rng.binomial
         self.theano_rng = theano_rng
@@ -57,9 +64,15 @@ class RBM:
         rv_u = self.theano_rng.uniform(size=size, dtype=dtype)
         return 1./(1+T.exp(-T.log(rv_u/(1-rv_u))+p))
 
+    def gauss_sample(self, size, n, p, dtype):
+        return self.theano_rng.normal(size=size, avg=p, std=1./128, dtype=dtype)
+
     def sample_h_given_v(self, v_sample):
         activ = T.dot(v_sample, self.W) + self.hbias
-        h_mean = T.nnet.sigmoid(activ)
+        if self.type is 'LIN':
+            h_mean= activ
+        else:
+            h_mean = T.nnet.sigmoid(activ)
         h_sample = self.theano_rng.binomial(size=h_mean.shape, n=1, 
                                             p=h_mean,
                                             dtype=theano.config.floatX)
@@ -67,10 +80,10 @@ class RBM:
 
     def sample_v_given_h(self, h_sample):
         activ = T.dot(h_sample, self.W.T) + self.vbias
-        #if self.v_unit is 'BIN':
-        v_mean = T.nnet.sigmoid(activ)
-        #else:
-        #    v_mean = activ
+        if self.type is 'LIN':# or self.v_type is 'GAUSS':
+            v_mean=activ
+        else:
+            v_mean = T.nnet.sigmoid(activ)
         v_sample = self.theano_rng.v_unit(size=v_mean.shape, n=1,
                                           p=v_mean, 
                                           dtype=theano.config.floatX)
@@ -90,17 +103,13 @@ class RBM:
         return -hidden -bias
         
 
-    def step(self, lr=0.1):
+    def step(self, lr):
         vs = self.inputs
         [hs, v1s, h1s] = self.gibbs_hvh(vs)
         
         cost = T.mean(self.free_energy(vs)) \
              - T.mean(self.free_energy(v1s))
         lr_T = T.cast(lr, dtype=theano.config.floatX)
-        dW  = T.tensordot(vs, hs, [0,0]) \
-            - T.tensordot(v1s,h1s,[0,0])
-        dhb = T.sum(hs-h1s, axis=0)
-        dvb = T.sum(vs-v1s, axis=0)
 
         updates = []
         gW = T.grad(cost, self.W, consider_constant=[v1s])
