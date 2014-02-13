@@ -39,14 +39,19 @@ class RBM:
             vbias = theano.shared(value=np.zeros(n_v,
                                 dtype=theano.config.floatX), name='vbias')
 
+        e1 = np.zeros((n_v, n_h), dtype=theano.config.floatX)
+        e2 = np.zeros((n_h, n_v), dtype=theano.config.floatX)
+
         self.inputs = inputs
         self.shape = (n_v, n_h)
 
         self.W = theano.shared(value=initial_W, name='W')
+        self.eps_up = theano.shared(value=e1, name='eps_u')
+        self.eps_down = theano.shared(value=e2, name='eps_d')
         self.vbias = vbias
         self.hbias = hbias
 
-        np_rng = np.random.RandomState(1234)
+        np_rng = np.random.RandomState()
         theano_rng = RandomStreams(np_rng.randint(2**30))
 
         self.v_type = v_unit
@@ -59,6 +64,9 @@ class RBM:
         self.theano_rng = theano_rng
 
         self.params = [self.W, self.vbias, self.hbias]
+        self.params_ft = [self.eps_up, self.eps_down]
+
+        self.hid = theano.function([self.inputs], self.up(self.inputs))
 
     def log_sample(self, size, n, p, dtype):
         rv_u = self.theano_rng.uniform(size=size, dtype=dtype)
@@ -67,23 +75,31 @@ class RBM:
     def gauss_sample(self, size, n, p, dtype):
         return self.theano_rng.normal(size=size, avg=p, std=1./128, dtype=dtype)
 
-    def sample_h_given_v(self, v_sample):
-        activ = T.dot(v_sample, self.W) + self.hbias
+    def up(self, vis):
+        activ = T.dot(vis, self.W+ self.eps_up) + self.hbias
         if self.type is 'LIN':
-            h_mean= activ
+            h_mean = activ
         else:
             h_mean = T.nnet.sigmoid(activ)
+        return h_mean
+
+    def down(self, hid):
+        activ = T.dot(hid, self.W.T + self.eps_down) + self.vbias
+        if self.type is 'LIN':
+            v_mean = activ
+        else:
+            v_mean = T.nnet.sigmoid(activ)
+        return v_mean
+
+    def sample_h_given_v(self, v_sample):
+        h_mean = self.up(v_sample)
         h_sample = self.theano_rng.binomial(size=h_mean.shape, n=1, 
                                             p=h_mean,
                                             dtype=theano.config.floatX)
         return h_sample
 
     def sample_v_given_h(self, h_sample):
-        activ = T.dot(h_sample, self.W.T) + self.vbias
-        if self.type is 'LIN':# or self.v_type is 'GAUSS':
-            v_mean=activ
-        else:
-            v_mean = T.nnet.sigmoid(activ)
+        v_mean = self.down(h_sample)
         v_sample = self.theano_rng.v_unit(size=v_mean.shape, n=1,
                                           p=v_mean, 
                                           dtype=theano.config.floatX)
