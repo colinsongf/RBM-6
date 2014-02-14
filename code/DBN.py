@@ -9,9 +9,10 @@ from RBM import RBM
 PARAMS = '../data/params'
 
 class DBN(object):
-    def __init__(self, shapes):
-        self.layers = []
+    def __init__(self, shapes, queue):
+        self.queue = queue
         
+        self.layers = []
         self.shapes = shapes
 
         (nv,_,_) = shapes[0]
@@ -65,7 +66,7 @@ class DBN(object):
 
         for i in range(self.N):
             print 'training layer {} / {}'.format(i+1, self.N)
-            self.train_layer(X, epochs=epochs, lr=lr/(i/2+1), k=i)
+            self.train_layer(X, epochs=epochs, lr=lr, k=i)
             X = self.layers[i].hid(X)
 
 
@@ -134,14 +135,16 @@ class DBN(object):
                                         outputs=self.decode)
 
     def load(self, fname=None):
+        import os
         if fname is None:
-            import os
             num=1
             l_files = os.listdir(PARAMS)
             while 'exp%i_params.npy'%num in l_files:
                 num += 1
             num -=1
             fname = 'exp%i'%num
+        if not os.path.exists(j(PARAMS, '%s_params.npy'%fname)):
+            return
         from os.path import join as j
         params = np.load(j(PARAMS, '%s_params.npy'%fname))
         params_ft = np.load(j(PARAMS, '%s_params_ft.npy'%fname))
