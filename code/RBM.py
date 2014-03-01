@@ -79,6 +79,10 @@ class RBM:
         activ = T.dot(vis, self.W+ self.eps_up) + self.hbias
         if self.type is 'LIN':
             h_mean = activ
+        elif self.type is 'ReLU':
+            h_mean = T.max(0, activ)
+        elif self.type is 'SoftPlus':
+            h_mean = T.log(1+T.exp(activ))
         else:
             h_mean = T.nnet.sigmoid(activ)
         return h_mean
@@ -87,6 +91,10 @@ class RBM:
         activ = T.dot(hid, self.W.T + self.eps_down) + self.vbias
         if self.type is 'LIN':
             v_mean = activ
+        elif self.type is 'ReLU':
+            h_mean = T.max(0, activ)
+        elif self.type is 'SoftPlus':
+            h_mean = T.log(1+T.exp(activ))
         else:
             v_mean = T.nnet.sigmoid(activ)
         return v_mean

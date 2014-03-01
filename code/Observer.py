@@ -1,14 +1,17 @@
 import numpy as np
 
-import multiprocessing
+import matplotlib.pyplot as plt        
+        
+from multiprocessing import Process
 
-class Observer(multiprocessing.Process):
-    def __init__(self, exp_name, queue):
+class Observer(Process):
+    def __init__(self, exp_name, queue, disp=True):
         self.name = exp_name
         self.queue = queue
+        self.disp = disp
+        super(Observer, self).__init__()
 
     def display_im(self, l_im):
-        import matplotlib.pyplot as plt
         n = len(l_im)
         n_p = l_im[0].shape[0]
         if n==1:
@@ -25,4 +28,19 @@ class Observer(multiprocessing.Process):
                 plt.imshow(l_im[i][k].reshape((28,28)))
                 plt.axis('off')
         plt.subplots_adjust(0,0,1.,1.,0,0)
-        plt.show()
+        plt.draw()
+
+    def run(self):
+        plt.ion()
+        run = True
+        while run:
+            item = self.queue.get()
+            if item[0] == 'im':
+                print 'IM'
+                if self.disp:
+                    self.display_im(item[1])
+            elif item[0] == 'end':
+                run = False
+            else:
+                print item[1]
+        plt.ioff()

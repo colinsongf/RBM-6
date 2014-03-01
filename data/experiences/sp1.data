@@ -1,0 +1,1 @@
+{"lay_shape": [[784, "", ""], [1000, "SoftPlus", "GAUSS"], [500, "SoftPlus", ""], [250, "SoftPlus", ""], [30, "SoftPlus", ""]], "epochs_lay": [40, 40, 40, 40], "epochs_ft": 0, "N_layer": 4}

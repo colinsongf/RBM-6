@@ -1,10 +1,6 @@
 import numpy as np
 
-from DBN import DBN
-
-from mnist import mnist_read
-
-
+from Experience import Experience
 
 if __name__=='__main__':
     import argparse
@@ -12,35 +8,49 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('-d', dest='debug', action='store_true', 
                     help='Use a small number of training example')
+    parser.add_argument('-n', dest='name', metavar='NAME', default=None,
+                    type=str, help='Name of the experiment')
+    parser.add_argument('--img', action='store_true',
+                    help='Display the reconstruction while training')
+    parser.add_argument('--lcost', action='store_true', help=('Fine tune loss function'
+                    ', default is MSE, else cross entropy')
+    parser.add_argument('--noise', type=str, default=None,
+                    help=('Denoising autoencoder, use GAUSS or MASK to get'
+                          'representation robust to noise'))
+    parser.add_argument('--dropout', action='store_true',
+                    help='Enable dropout training')
+    parser.add_argument('--epochs', type=int, default=30,
+                    help='Number of epochs for fine tune')
+    parser.add_argument('--training', type=str, default='10000',
+                    help='Number of training exemple used')
     args = parser.parse_args()
-    
-    N = 10000
-    N_tst = 10
-    max_epochs = 100
+    try:
+        N = int(args.training)
+    except ValueError:
+        if N == 'full':
+            N = 60000
+        else:
+            print 'Couldn\'t cast the number of training. Used 10000'
+            N = 10000
+    max_epochs = 10
+    max_epochs_ft = args.epochs
     if args.debug:
-        N = 1500
-        max_epochs=10
+        N = N / 10
+        max_epochs = 10
+        max_epochs_ft = max(10, max_epochs_ft)
 
-    X = mnist_read('../data/train-images-idx3-ubyte.gz', nmax=N+N_tst)
-
-    model = DBN([(784, None, ''), (1000, None, 'GAUSS'), (500, None, ''),
-                (250, 'LOG', ''), (30, None, '')])
-
-    X_trn = X[:N].reshape((-1,784))/255.
-    X_tst = X[N:].reshape((-1,784))/255.
-
-    model.pretrain(X_trn, epochs=max_epochs, lr=0.05)
-    rec = model.sample(X_tst)
+    model = Experience(N, name=args.name, disp=args.img, 
+                          noise=args.noise)
+    if not model.exists:
+        model.pretrain(epochs=max_epochs, lr=0.1)
+        model.save()
     print 'Pretraining done\n'
 
-    model.fine_tune(X_trn, X_tst,epochs=max_epochs)
-    test = model.sample(X_tst)
+    model.fine_tune(epochs=max_epochs_ft, lr=0.05,
+                    dropout=args.dropout, lcost=args.lcost)
+    
+    X_tst = model.X_tst
+    X_rcstr = model.dbn.f_recstr(X_tst)
+    model.obs.display_im([X_tst[:10], X_recstr[:10]])
 
-    from utils.Observer import Observer
-    obs = Observer('test')
-    disp = []
-    disp.append(X_trn[:6])
-    disp.append(rec[:6])
-    disp.append(test[:6])
-    obs.display_im(disp)
-
+    model.eval_perf()
