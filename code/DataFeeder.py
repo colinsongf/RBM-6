@@ -11,6 +11,7 @@ class DataFeeder(object):
         self.X_tst = np.asarray(X_tst).reshape((-1,784))/255.
         self.y_tst = np.asarray(y_tst)
 
+        self.batch_s = batch_s
         if type(batch_s) is float:
             self.batch_s = int(N*batch_s)
         self.n_batches = N/self.batch_s

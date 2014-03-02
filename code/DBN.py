@@ -43,23 +43,31 @@ class DBN(object):
         sample_up = X
 
         # Compute the droupout training function
-        p_do = 0.4
+        p_do = 0.5
+        self.p_do = p_do
         dropout_out =X
+        rec_do = X
 
         # Build the layers,  linking each one to the next
         # Fill the param list
-        for s in shapes[1:]:
-            self.layers.append(RBM(nv, s[0], output, v_unit=s[2],
-                                   unit_type=s[1]))
-            self.params += self.layers[-1].params
-            self.params_ft += self.layers[-1].params_ft
+        for i, s in enumerate(shapes[1:]):
+            lay = RBM(nv, s[0], output, v_unit=s[2],
+                                   unit_type=s[1])
+            self.layers.append(lay)
+
+            self.params += lay.params
+            self.params_ft += lay.params_ft
             nv = s[0]
 
-            output = self.layers[-1].up(output)
-            sample_up = self.layers[-1].sample_h_given_v(sample_up)
-            dropout_out *= theano_rng.binomial(size=dropout_out.shape,
-                                    n=1, p=p_do)/(1-p_do)
-            dropout_out = self.layers[-1].up(dropout_out)
+            output = lay.up(output)
+            sample_up = lay.sample_h_given_v(sample_up)
+            if i != 0:
+                dropout_out *= theano_rng.binomial(size=dropout_out.shape,
+                                        n=1, p=p_do)
+                rec_do *= p_do
+            dropout_out = lay.up(dropout_out)
+            rec_do = lay.up(rec_do)
+            
 
         # Define the up functions
         self.code = output
@@ -95,9 +103,12 @@ class DBN(object):
             fine_tune = lay.down(fine_tune)
             sample_dowm = lay.sample_v_given_h(sample_down)
             sample = lay.sample_v_given_h(sample)
-            dropout_out *= theano_rng.binomial(size=dropout_out.shape,
+            if i!= self.N:
+                rec_do *= p_do
+                dropout_out *= theano_rng.binomial(size=dropout_out.shape,
                                     n=1, p=p_do)
             dropout_out = lay.down(dropout_out)
+            rec_do = lay.down(rec_do)
 
         #define the sampeling and decoding functions
         self.recstr = recstr
@@ -111,7 +122,8 @@ class DBN(object):
     
     def pretrain(self, X_trn, epochs, lr, batch_s=0.1):
         X = X_trn
-
+        
+        self.batch_s = batch_s
         if type(batch_s) is float:
             self.batch_s = int(X_trn.shape[0]*batch_s)
         self.n_batches = X.shape[0]/self.batch_s
@@ -126,14 +138,19 @@ class DBN(object):
                  lcost=False, dropout=False):
         if dropout:
             out = self.do
+            for l in self.layers[1:]:
+                l.W.set_value(l.W.get_value()/self.p_do)
         else:
             out = self.ft
 
         if not lcost:
-            cost = T.mean((out-self.inputs)**2)/data.batch_s
+            cost = T.mean(T.sum((out-self.inputs)**2, axis=1))
+            cost_val = T.mean(T.sum((self.recstr-self.inputs)**2,axis=1))
         else:
-            cost = T.sum(-self.inputs*T.log(out) -
-                         (1-self.inputs)*T.log(1-out))
+            cost = T.mean(T.sum(-self.inputs*T.log(out) -
+                         (1-self.inputs)*T.log(1-out), axis=1))
+            cost_val = T.mean(T.sum(-self.inputs*T.log(self.recstr)-
+                        (1-self.inputs)*T.log(1-self.recstr), axis=1))
         params = []
         updates = self.get_update(cost, self.params_ft, self.lr)
         
@@ -141,24 +158,23 @@ class DBN(object):
                                 outputs=cost, 
                                 updates=updates,
                                 on_unused_input='ignore')
-        f_cost = theano.function(inputs=[self.inputs], outputs=cost)
+        f_cost = theano.function(inputs=[self.inputs], outputs=cost_val)
         n_batches = data.n_batches
         batch_s = data.batch_s
         
 
         X_val = data.get_valid_set()
         for epoch in range(epochs):
-            m_cost = []
-            for ind in range(n_batches-1):
-                m_cost += [f_train(data.get_batch(), 
-                            cl(epoch), lr(epoch))]
-            recstr = self.f_recstr(X_val[:10])
-            self.queue.put(('im', [X_val[:10], recstr])) 
-            m_cost = np.mean(m_cost)
-            self.queue.put(('tex', 'Done epoch {}... cout moyen is {:5},'
-                        'validation cost {:5}'.format(epoch, m_cost,
-                        f_cost(X_val))))
-
+            m_cost = f_train(data.get_batch(), 
+                           cl(epoch), lr(epoch))
+            if epoch % 10 == 0 or epoch == epochs-1:
+                val_cost = f_cost(X_val)
+                recstr = self.f_recstr(X_val[:10])
+                self.queue.put(('im', [X_val[:10], recstr])) 
+                self.queue.put(('cost', (epoch, m_cost, val_cost)))
+        if dropout:
+            for l in self.layers[1:]:
+                l.W.set_value(l.W.get_value()*self.p_do)
     
     def get_update(self, cost, params, lr):
         updates = []

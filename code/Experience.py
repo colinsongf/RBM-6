@@ -24,8 +24,13 @@ class Experience(object):
         # We create one from the default experience
         fname = path.join(EXP_DIR, '%s.data'%name)
         if not path.exists(fname):
+            e_name = ''.join(c for c in name if c.isalpha())
+            e_name = path.join(EXP_DIR, '%s.data'%e_name)
             from shutil import copy
-            copy(path.join(EXP_DIR, 'default.data'), fname)
+            if not path.exists(e_name):
+                copy(path.join(EXP_DIR, 'default.data'), fname)
+            else:
+                copy(e_name, fname)
         
         #We load the experience parameters
         import json
@@ -35,16 +40,16 @@ class Experience(object):
         self.params_exp = params_exp
 
         # Create the instance of the experience
-        q = Queue()
-        self.obs = Observer(name, q, disp)
-        self.dbn = DBN(params_exp['lay_shape'], q, noise)
+        self.queue = Queue()
+        self.obs = lambda: Observer(name, self.queue, disp)
+        self.dbn = DBN(params_exp['lay_shape'], self.queue, noise)
 
         #Load the model weights if it exists
         self.exists = self.dbn.load(name)
 
         #Load the dataset and split between train and test set
         from DataFeeder import DataFeeder
-        self.data = DataFeeder(N)
+        self.data = DataFeeder(N, batch_s=1000)
 
     def pretrain(self, epochs=30, lr=0.1):
         l_r = lr
@@ -61,11 +66,13 @@ class Experience(object):
             l_r = lambda e: lr
         if type(c_l) == float:
             c_l= lambda e: cl
-        self.obs.start()
+        p = self.obs()
+        p.start()
         self.dbn.fine_tune(self.data, epochs=epochs, lr=l_r, 
                            cl=c_l, lcost=lcost, dropout=dropout)
         self.params_exp['epochs_ft'] += epochs
-        self.dbn.queue.put(('end',))
+        self.queue.put(('end',))
+        p.join()
 
     def eval_perf(self):
         X_tst, y_tst = self.data.get_test_set()
@@ -90,5 +97,4 @@ class Experience(object):
         
         # Save the model weights
         self.dbn.save(self.name)
-
-
+        

@@ -13,7 +13,7 @@ if __name__=='__main__':
     parser.add_argument('--img', action='store_true',
                     help='Display the reconstruction while training')
     parser.add_argument('--lcost', action='store_true', help=('Fine tune loss function'
-                    ', default is MSE, else cross entropy')
+                    ', default is MSE, else cross entropy'))
     parser.add_argument('--noise', type=str, default=None,
                     help=('Denoising autoencoder, use GAUSS or MASK to get'
                           'representation robust to noise'))
@@ -23,16 +23,18 @@ if __name__=='__main__':
                     help='Number of epochs for fine tune')
     parser.add_argument('--training', type=str, default='10000',
                     help='Number of training exemple used')
+    parser.add_argument('--save', action='store_true',
+                    help='Save the experiement at the end')
     args = parser.parse_args()
     try:
         N = int(args.training)
     except ValueError:
-        if N == 'full':
+        if args.training == 'full':
             N = 60000
         else:
             print 'Couldn\'t cast the number of training. Used 10000'
             N = 10000
-    max_epochs = 10
+    max_epochs = 15
     max_epochs_ft = args.epochs
     if args.debug:
         N = N / 10
@@ -49,8 +51,6 @@ if __name__=='__main__':
     model.fine_tune(epochs=max_epochs_ft, lr=0.05,
                     dropout=args.dropout, lcost=args.lcost)
     
-    X_tst = model.X_tst
-    X_rcstr = model.dbn.f_recstr(X_tst)
-    model.obs.display_im([X_tst[:10], X_recstr[:10]])
-
     model.eval_perf()
+
+    model.save()
