@@ -1,1 +1,1 @@
-{"lay_shape": [[784, "", ""], [1000, "", "GAUSS"], [500, "ReLU", ""], [250, "ReLU", ""], [30, "LIN", ""]], "epochs_lay": [15, 15, 15, 15], "epochs_ft": 0, "N_layer": 4}
+{"lay_shape": [[784, "", ""], [1000, "", "GAUSS"], [500, "ReLU", ""], [250, "ReLU", ""], [30, "LIN", ""]], "epochs_lay": [15, 15, 15, 15], "epochs_ft": 300, "N_layer": 4}

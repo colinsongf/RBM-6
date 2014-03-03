@@ -49,8 +49,9 @@ class Observer(Process):
                 run = False
             elif item[0] == 'cost':
                 self.cost.append(item[1])
-                print ('Epoch {}, train_cost {}, val cost '
-                       '{}').format(item[1][0], item[1][1], item[1][2])
+                print ('{}: Epoch {}, train_cost {}, val cost '
+                       '{}').format(self.exp_name,item[1][0], 
+                                    item[1][1], item[1][2])
             else:
                 print item[1]
         plt.ioff()

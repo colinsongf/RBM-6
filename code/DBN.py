@@ -28,10 +28,11 @@ class DBN(object):
         # Random number generators used for the noise
         np_rng = np.random.RandomState()
         theano_rng = RandomStreams(np_rng.randint(2**30))
-
+        
         # Layers initialisation, cast the shape
         # and fill the layers list.
         self.layers = []
+        self.mask = []
         
         self.shapes = shapes
         (nv,_,_) = shapes[0]
@@ -62,8 +63,8 @@ class DBN(object):
             output = lay.up(output)
             sample_up = lay.sample_h_given_v(sample_up)
             if i != 0:
-                dropout_out *= theano_rng.binomial(size=dropout_out.shape,
-                                        n=1, p=p_do)
+                mask = theano_rng.binomial(size=dropout_out.shape, n=1, p=p_do)
+                dropout_out *= mask
                 rec_do *= p_do
             dropout_out = lay.up(dropout_out)
             rec_do = lay.up(rec_do)
@@ -105,8 +106,9 @@ class DBN(object):
             sample = lay.sample_v_given_h(sample)
             if i!= self.N:
                 rec_do *= p_do
-                dropout_out *= theano_rng.binomial(size=dropout_out.shape,
+                mask = theano_rng.binomial(size=dropout_out.shape,
                                     n=1, p=p_do)
+                dropout_out *= mask
             dropout_out = lay.down(dropout_out)
             rec_do = lay.down(rec_do)
 
@@ -139,6 +141,8 @@ class DBN(object):
         if dropout:
             out = self.do
             for l in self.layers[1:]:
+                l.eps_up.set_value(l.eps_up.get_value()/self.p_do)
+                l.eps_down.set_value(l.eps_down.get_value()/self.p_do)
                 l.W.set_value(l.W.get_value()/self.p_do)
         else:
             out = self.ft
@@ -174,6 +178,8 @@ class DBN(object):
                 self.queue.put(('cost', (epoch, m_cost, val_cost)))
         if dropout:
             for l in self.layers[1:]:
+                l.eps_up.set_value(l.eps_up.get_value()*self.p_do)
+                l.eps_down.set_value(l.eps_down.get_value()*self.p_do)
                 l.W.set_value(l.W.get_value()*self.p_do)
     
     def get_update(self, cost, params, lr):
